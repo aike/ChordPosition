@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChordPosition - ギターコードポジション</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #1c1c2e;
+      --bg2:     #252538;
+      --board:   #1a1030;
+      --fline:   #3a3060;
+      --nut:     #c8a456;
+      --str:     #6677aa;
+      --root:    #ff6b6b;
+      --tone:    #5bc8f5;
+      --text:    #cdd6f4;
+      --muted:   #6c7086;
+      --marker:  rgba(100, 160, 255, 0.25);
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 28px 16px 48px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.4em;
+      color: var(--root);
+      margin-bottom: 28px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    /* ── Input ── */
+    .input-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    #chordInput {
+      width: 180px;
+      padding: 10px 16px;
+      font-size: 1.5em;
+      font-weight: bold;
+      text-align: center;
+      background: var(--bg2);
+      border: 2px solid var(--fline);
+      border-radius: 10px;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #chordInput:focus { border-color: var(--root); }
+    #chordInput::placeholder { color: var(--muted); font-weight: normal; font-size: 0.75em; }
+
+    #showBtn {
+      padding: 11px 22px;
+      background: var(--root);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 1em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    #showBtn:hover  { background: #ff4757; }
+    #showBtn:active { transform: scale(0.96); }
+
+    /* ── Quick chord buttons ── */
+    .quick-row {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 22px;
+      padding: 0 4px;
+    }
+
+    .qbtn {
+      padding: 4px 13px;
+      background: var(--bg2);
+      color: var(--muted);
+      border: 1px solid var(--fline);
+      border-radius: 20px;
+      font-size: 0.82em;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .qbtn:hover { background: var(--board); color: var(--text); border-color: var(--tone); }
+
+    /* ── Chord info ── */
+    #chordInfo {
+      text-align: center;
+      min-height: 2.4em;
+      margin-bottom: 22px;
+      font-size: 0.92em;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    #chordInfo .cname   { color: var(--root); font-size: 1.3em; font-weight: bold; }
+    #chordInfo .cnotes  { color: var(--tone); font-weight: bold; letter-spacing: 0.04em; }
+    #chordInfo .cerror  { color: #ff5252; }
+    #chordInfo .civ     { color: var(--muted); font-size: 0.9em; }
+
+    /* ── Fretboard ── */
+    .board-wrap { overflow-x: auto; padding-bottom: 8px; }
+
+    .board {
+      border-collapse: collapse;
+      margin: 0 auto;
+      border-spacing: 0;
+    }
+
+    .board th, .board td { padding: 0; }
+
+    .fnum {
+      text-align: center;
+      font-size: 0.7em;
+      color: var(--muted);
+      font-family: monospace;
+      padding-bottom: 7px;
+      width: 52px;
+      user-select: none;
+    }
+    .fnum.oh { width: 50px; }
+
+    .slabel {
+      font-size: 0.76em;
+      font-weight: bold;
+      color: var(--muted);
+      text-align: right;
+      padding-right: 10px;
+      white-space: nowrap;
+      user-select: none;
+      min-width: 44px;
+    }
+
+    /* ポジションマーカー (フレットボード内、弦と弦の間) */
+    .pdot {
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 18px;
+      height: 180px;
+      border-radius: 3px;
+      background: var(--marker);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Fret cell */
+    .fc {
+      position: relative;
+      width: 52px;
+      height: 46px;
+      background: var(--board);
+      border-left: 2px solid var(--fline);
+    }
+
+    /* Open string column */
+    .fc.oc {
+      width: 50px;
+      background: var(--bg2);
+      border-left: none;
+      border-right: 4px solid var(--nut);
+    }
+
+    /* String line */
+    .sl {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      transform: translateY(-50%);
+      background: var(--str);
+      pointer-events: none;
+      opacity: 0.8;
+    }
+
+    /* Note dot */
+    .nd {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7em;
+      font-weight: bold;
+      color: #fff;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .nd.root { background: var(--root); box-shadow: 0 0 10px rgba(255,107,107,0.55); }
+    .nd.tone { background: transparent; border: 2px solid var(--tone); color: var(--tone); }
+
+    /* ── Legend ── */
+    #legend {
+      display: none;
+      justify-content: center;
+      gap: 28px;
+      margin-top: 22px;
+      font-size: 0.82em;
+      color: var(--muted);
+    }
+
+    .leg { display: flex; align-items: center; gap: 8px; }
+    .ldot { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; }
+    .ldot.root { background: var(--root); }
+    .ldot.tone { border: 2px solid var(--tone); }
+
+    /* ── Help text ── */
+    .help {
+      text-align: center;
+      font-size: 0.78em;
+      color: var(--muted);
+      margin-top: 32px;
+      line-height: 1.8;
+    }
+    .help code {
+      background: var(--bg2);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 1em;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+
+<h1>ChordPosition</h1>
+
+<div class="input-row">
+  <input type="text" id="chordInput" placeholder="例: Am7" autocomplete="off" spellcheck="false">
+  <button id="showBtn" onclick="showChord()">表示</button>
+</div>
+
+<div class="quick-row" id="quickRow"></div>
+
+<div id="chordInfo"></div>
+
+<div class="board-wrap">
+  <table class="board" id="board"></table>
+</div>
+
+<div id="legend">
+  <div class="leg"><div class="ldot root"></div><span>ルート音</span></div>
+  <div class="leg"><div class="ldot tone"></div><span>コード構成音</span></div>
+</div>
+
+<div class="help" id="help">
+  対応表記例:
+  <code>C</code> <code>Am</code> <code>G7</code> <code>Cmaj7</code> <code>Dm7</code>
+  <code>Bdim</code> <code>Faug</code> <code>Asus4</code> <code>C#m7b5</code> …
+</div>
+
+<script>
+// ── 音名定数 ──
+const SH = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const FL = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+
+const NOTE_MAP = {
+  'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'Fb':4,'E#':5,
+  'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,
+  'B':11,'Cb':11,'B#':0
+};
+
+// ── ギター標準チューニング (6弦〜1弦) ──
+const OPEN  = [4, 9, 2, 7, 11, 4];         // E A D G B e
+const SNAME = ['6E','5A','4D','3G','2B','1e'];
+const GAUGE = [3.0, 2.5, 2.0, 1.5, 1.2, 0.8]; // 弦の太さ (px)
+
+// ポジションマーカーがあるフレット
+const MARKERS = new Set([3, 5, 7, 9]);
+
+// ── コードタイプ定義 (長いサフィックスを先に並べる) ──
+const TYPES = [
+  // maj系
+  ['maj13', [0,4,7,11,2,9]],
+  ['maj11', [0,4,7,11,2,5]],
+  ['maj9',  [0,4,7,11,2]],
+  ['maj7',  [0,4,7,11]],
+  ['maj6',  [0,4,7,9]],
+  ['Maj13', [0,4,7,11,2,9]],
+  ['Maj11', [0,4,7,11,2,5]],
+  ['Maj9',  [0,4,7,11,2]],
+  ['Maj7',  [0,4,7,11]],
+  ['M13',   [0,4,7,11,2,9]],
+  ['M11',   [0,4,7,11,2,5]],
+  ['M9',    [0,4,7,11,2]],
+  ['M7',    [0,4,7,11]],
+  // minor系
+  ['mM7',   [0,3,7,11]],
+  ['m7b5',  [0,3,6,10]],
+  ['min13', [0,3,7,10,2,9]],
+  ['min11', [0,3,7,10,2,5]],
+  ['min9',  [0,3,7,10,2]],
+  ['min7',  [0,3,7,10]],
+  ['min6',  [0,3,7,9]],
+  ['min',   [0,3,7]],
+  ['m13',   [0,3,7,10,2,9]],
+  ['m11',   [0,3,7,10,2,5]],
+  ['m9',    [0,3,7,10,2]],
+  ['m7',    [0,3,7,10]],
+  ['m6',    [0,3,7,9]],
+  ['m',     [0,3,7]],
+  // dim / aug
+  ['dim7',  [0,3,6,9]],
+  ['dim',   [0,3,6]],
+  ['aug7',  [0,4,8,10]],
+  ['aug',   [0,4,8]],
+  // sus
+  ['7sus4', [0,5,7,10]],
+  ['7sus2', [0,2,7,10]],
+  ['sus4',  [0,5,7]],
+  ['sus2',  [0,2,7]],
+  // add
+  ['add9',  [0,4,7,2]],
+  ['add2',  [0,4,7,2]],
+  // テンション系 (dominant)
+  ['13',    [0,4,7,10,2,5,9]],
+  ['11',    [0,4,7,10,2,5]],
+  ['9',     [0,4,7,10,2]],
+  ['7',     [0,4,7,10]],
+  ['6',     [0,4,7,9]],
+  ['5',     [0,7]],
+  // 記号表記
+  ['+',     [0,4,8]],
+  ['o7',    [0,3,6,9]],
+  ['o',     [0,3,6]],
+  ['Δ7',    [0,4,7,11]],
+  ['Δ',     [0,4,7,11]],
+  ['ø7',    [0,3,6,10]],
+  ['ø',     [0,3,6,10]],
+  ['°7',    [0,3,6,9]],
+  ['°',     [0,3,6]],
+  // major (サフィックスなし)
+  ['',      [0,4,7]],
+];
+
+// インターバル名 (度数表示用)
+const IV_NAMES = {
+  0:'R', 2:'9th', 3:'m3', 4:'M3', 5:'4th/11th', 6:'♭5', 7:'5th',
+  8:'♯5', 9:'6th/13th', 10:'♭7', 11:'M7', 14:'9th',
+};
+
+function parseChord(input) {
+  const s = input.trim();
+  if (!s) return null;
+
+  // ルート音を解析
+  let i = 0;
+  let root = s[i++].toUpperCase();
+  if (i < s.length && (s[i] === '#' || s[i] === 'b')) root += s[i++];
+
+  const rootNum = NOTE_MAP[root];
+  if (rootNum === undefined) return null;
+
+  // サフィックス (スラッシュコードのベース音は無視)
+  let suffix = s.slice(i);
+  const slash = suffix.indexOf('/');
+  if (slash !== -1) suffix = suffix.slice(0, slash);
+
+  for (const [name, ivs] of TYPES) {
+    if (suffix === name) {
+      const useFlat = root.endsWith('b') || root === 'F';
+      const tones = ivs.map(iv => (rootNum + iv) % 12);
+      const ivNames = ivs.map(iv => IV_NAMES[iv] || String(iv));
+      return { rootNum, tones, toneSet: new Set(tones), ivs, ivNames, useFlat, display: s };
+    }
+  }
+  return null;
+}
+
+function noteName(n, flat) {
+  return flat ? FL[n % 12] : SH[n % 12];
+}
+
+// ── フレットボード描画 ──
+function render(chord) {
+  const table = document.getElementById('board');
+  table.innerHTML = '';
+
+  // ヘッダー行 (フレット番号)
+  const hrow = table.insertRow();
+  const corner = document.createElement('th');
+  hrow.appendChild(corner);
+
+  const ohd = document.createElement('th');
+  ohd.className = 'fnum oh';
+  ohd.textContent = 'open';
+  hrow.appendChild(ohd);
+
+  for (let f = 1; f <= 11; f++) {
+    const th = document.createElement('th');
+    th.className = 'fnum';
+    th.textContent = f;
+    hrow.appendChild(th);
+  }
+
+  // 弦行
+  for (let s = 0; s < 6; s++) {
+    const row = table.insertRow();
+
+    // 弦ラベル
+    const lc = row.insertCell();
+    lc.className = 'slabel';
+    lc.textContent = SNAME[s];
+
+    // フレットセル (0〜11)
+    for (let f = 0; f <= 11; f++) {
+      const cell = row.insertCell();
+      cell.className = 'fc' + (f === 0 ? ' oc' : '');
+
+      // 弦の線
+      const sl = document.createElement('div');
+      sl.className = 'sl';
+      sl.style.height = GAUGE[s] + 'px';
+      cell.appendChild(sl);
+
+      // ポジションマーカー (4D弦セルの下方 = 4D弦と3G弦の間に見える)
+      if (f !== 0 && MARKERS.has(f) && s === 2) {
+        const pd = document.createElement('div');
+        pd.className = 'pdot';
+        cell.appendChild(pd);
+      }
+
+      // 音符ドット
+      if (chord) {
+        const nn = (OPEN[s] + f) % 12;
+        if (chord.toneSet.has(nn)) {
+          const nd = document.createElement('div');
+          nd.className = 'nd ' + (nn === chord.rootNum ? 'root' : 'tone');
+          nd.textContent = noteName(nn, chord.useFlat);
+          cell.appendChild(nd);
+        }
+      }
+    }
+  }
+
+}
+
+// ── コード表示 ──
+function showChord() {
+  const val = document.getElementById('chordInput').value;
+  const info = document.getElementById('chordInfo');
+  const legend = document.getElementById('legend');
+  const help = document.getElementById('help');
+
+  if (!val.trim()) {
+    info.innerHTML = '';
+    render(null);
+    legend.style.display = 'none';
+    help.style.display = '';
+    return;
+  }
+
+  const chord = parseChord(val);
+
+  if (!chord) {
+    info.innerHTML = `<span class="cerror">「${escHtml(val)}」は認識できないコードネームです</span>`;
+    render(null);
+    legend.style.display = 'none';
+    help.style.display = '';
+    return;
+  }
+
+  // 構成音リスト (ルートから順に)
+  const noteList = chord.tones.map((t, i) => {
+    const n = noteName(t, chord.useFlat);
+    return i === 0
+      ? `<span style="color:var(--root);font-weight:bold">${n}</span>`
+      : `<span class="cnotes">${n}</span>`;
+  }).join(' &nbsp;–&nbsp; ');
+
+  // インターバル表示
+  const ivList = chord.ivNames.join(' / ');
+
+  info.innerHTML =
+    `<div><span class="cname">${escHtml(chord.display)}</span></div>` +
+    `<div>構成音: ${noteList}</div>` +
+    `<div class="civ">${ivList}</div>`;
+
+  render(chord);
+  legend.style.display = 'flex';
+  help.style.display = 'none';
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── クイックボタン ──
+const QUICK = [
+  'C','G','Am','Em','F','Dm',
+  'G7','Cmaj7','Am7','Dm7','E7','A7',
+  'Bm','F#m','Bdim','Baug','Dsus4','Cadd9'
+];
+
+const qrow = document.getElementById('quickRow');
+for (const ch of QUICK) {
+  const btn = document.createElement('button');
+  btn.className = 'qbtn';
+  btn.textContent = ch;
+  btn.onclick = () => {
+    document.getElementById('chordInput').value = ch;
+    showChord();
+  };
+  qrow.appendChild(btn);
+}
+
+// Enter キー対応
+document.getElementById('chordInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') showChord();
+});
+
+// 入力のたびにリアルタイム更新
+document.getElementById('chordInput').addEventListener('input', () => {
+  const val = document.getElementById('chordInput').value.trim();
+  if (val) showChord();
+});
+
+// 初期表示
+document.getElementById('chordInput').value = 'Am7';
+showChord();
+</script>
+</body>
+</html>
